@@ -1,0 +1,246 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الخزينة وطباعة الوصولات - مدرسة الدعم</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+        .glass-card { background: rgba(17, 24, 39, 0.78); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glass-input { background: rgba(31, 41, 55, 0.65); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; }
+        .glass-input:focus { border-color: #10b981; outline: none; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+
+        /* تنسيق الطباعة الخاص بالوصل الصغير فقط */
+        @media print {
+            body * { visibility: hidden; }
+            #printableReceipt, #printableReceipt * { visibility: visible; }
+            #printableReceipt {
+                position: fixed;
+                left: 50%;
+                top: 20px;
+                transform: translateX(-50%);
+                width: 80mm;
+                background: #fff !important;
+                color: #000 !important;
+                border: 1px dashed #000 !important;
+                padding: 15px;
+                box-shadow: none !important;
+            }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto space-y-8">
+        
+        <!-- الهيدر -->
+        <header class="glass-card p-6 rounded-3xl flex justify-between items-center shadow-2xl border-b border-emerald-500/20">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-2xl shadow-lg">💳</div>
+                <div>
+                    <h1 class="text-2xl font-black text-white">الخزينة وطباعة الوصولات</h1>
+                    <p class="text-sm text-slate-400">تسجيل الدفع السريع واستخراج وصل التلميذ</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- نموذج الدفع السريع -->
+        <section class="glass-card p-8 rounded-3xl shadow-xl space-y-6">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="lookupCode" placeholder="أدخل كود التلميذ (مثال: ST-4829) لجلب اسمه تلقائياً..." class="glass-input flex-1 p-4 rounded-2xl text-sm font-mono uppercase">
+                <button onclick="findStudent()" class="px-6 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 font-bold text-sm text-emerald-400 transition">
+                    <i class="fa-solid fa-magnifying-glass ml-1"></i> جلب البيانات
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-2">اسم ولقب التلميذ</label>
+                    <input type="text" id="payStudentName" placeholder="يظهر تلقائياً أو اكتبه..." class="glass-input w-full p-3.5 rounded-2xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-2">الشهر المدفوع</label>
+                    <input type="text" id="payMonth" placeholder="مثال: نوفمبر 2026" class="glass-input w-full p-3.5 rounded-2xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-2">المبلغ المدفوع (دج)</label>
+                    <input type="number" id="payAmount" placeholder="مثال: 2000" class="glass-input w-full p-3.5 rounded-2xl text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-2">تاريخ الدفع</label>
+                    <input type="text" id="payDate" class="glass-input w-full p-3.5 rounded-2xl text-sm">
+                </div>
+            </div>
+
+            <button onclick="processPaymentAndReceipt()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold p-4 rounded-2xl text-white shadow-lg transition text-lg">
+                <i class="fa-solid fa-print ml-2"></i> تأكيد الدفع وإصدار وصل الطباعة
+            </button>
+        </section>
+
+        <!-- سجل آخر المدفوعات -->
+        <section class="glass-card p-6 rounded-3xl shadow-xl space-y-4">
+            <h3 class="text-lg font-bold text-white"><i class="fa-solid fa-clock-rotate-left ml-2 text-emerald-400"></i> آخر العمليات المالية</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-right border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-700/60 text-slate-400 text-xs">
+                            <th class="p-3">الكود</th>
+                            <th class="p-3">الاسم واللقب</th>
+                            <th class="p-3">الشهر</th>
+                            <th class="p-3">المبلغ</th>
+                            <th class="p-3">التاريخ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentsTableBody" class="divide-y divide-slate-800/50 text-sm"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- نافذة الوصل الصغير القابل للطباعة -->
+    <div id="receiptModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 p-6 rounded-3xl max-w-sm w-full space-y-5 border border-slate-700">
+            
+            <!-- محتوى الوصل المخصص للطباعة -->
+            <div id="printableReceipt" class="bg-white text-slate-900 p-6 rounded-2xl space-y-3 text-center border-2 border-dashed border-slate-300">
+                <h2 class="text-lg font-black border-b border-slate-300 pb-2">مدرسة الدعم التعليمي</h2>
+                <p class="text-xs font-bold text-slate-500">وصل تسديد مستحقات شهرية</p>
+                
+                <div class="text-right text-sm space-y-1.5 pt-2">
+                    <p><strong>التلميذ:</strong> <span id="recName"></span></p>
+                    <p><strong>الكود الخاص:</strong> <span id="recCode" class="font-mono"></span></p>
+                    <p><strong>الشهر:</strong> <span id="recMonth"></span></p>
+                    <p><strong>المبلغ المدفوع:</strong> <span id="recAmount"></span> دج</p>
+                    <p><strong>تاريخ الدفع:</strong> <span id="recDate"></span></p>
+                </div>
+
+                <div class="pt-3 border-t border-slate-300 text-xs font-bold text-emerald-700">
+                    ✓ تم الدفع بنجاح - شكراً لثقتكم
+                </div>
+            </div>
+
+            <div class="flex gap-3 no-print">
+                <button onclick="window.print()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 p-3 rounded-xl font-bold text-sm text-white">
+                    <i class="fa-solid fa-print ml-1"></i> طباعة الوصل
+                </button>
+                <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 p-3 rounded-xl font-bold text-sm text-white">
+                    إغلاق
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ==========================================
+        // ضع إعدادات Firebase الخاصة بمشروعك هنا
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCWStKlmjGctFpKDTdM20ZjpEds314xEMY",
+            authDomain: "ecole-pro-90c70.firebaseapp.com",
+            projectId: "ecole-pro-90c70",
+            storageBucket: "ecole-pro-90c70.firebasestorage.app",
+            messagingSenderId: "1083998100049",
+            appId: "1:1083998100049:web:57830391ab0bfa7359b670"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // تعبئة تاريخ اليوم تلقائياً
+        document.getElementById('payDate').value = new Date().toLocaleDateString('ar-DZ');
+
+        // جلب اسم التلميذ من الكود
+        function findStudent() {
+            const code = document.getElementById('lookupCode').value.trim().toUpperCase();
+            if (!code) return;
+
+            db.collection('students').doc(code).get().then(doc => {
+                if (doc.exists) {
+                    document.getElementById('payStudentName').value = doc.data().fullName;
+                } else {
+                    alert("لم يتم العثور على تلميذ بهذا الكود!");
+                }
+            });
+        }
+
+        // تأكيد الدفع وعرض الوصل
+        function processPaymentAndReceipt() {
+            const code = document.getElementById('lookupCode').value.trim().toUpperCase();
+            const name = document.getElementById('payStudentName').value.trim();
+            const month = document.getElementById('payMonth').value.trim();
+            const amount = document.getElementById('payAmount').value.trim();
+            const date = document.getElementById('payDate').value.trim();
+
+            if (!code || !name || !month || !amount) {
+                alert("يرجى ملء جميع الحقول!");
+                return;
+            }
+
+            const studentRef = db.collection('students').doc(code);
+
+            studentRef.get().then(doc => {
+                if (!doc.exists) {
+                    alert("كود التلميذ غير مسجل في قاعدة البيانات!");
+                    return;
+                }
+
+                // 1. تحديث حالة التلميذ إلى مخلص الشهر
+                studentRef.update({
+                    isPaid: true,
+                    lastPaidMonth: month
+                });
+
+                // 2. حفظ العملية في سجل المدفوعات
+                db.collection('payments').add({
+                    studentCode: code,
+                    studentName: name,
+                    month,
+                    amount: Number(amount),
+                    date,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => {
+                    // تعبئة بيانات الوصل وعرضه
+                    document.getElementById('recName').innerText = name;
+                    document.getElementById('recCode').innerText = code;
+                    document.getElementById('recMonth').innerText = month;
+                    document.getElementById('recAmount').innerText = amount;
+                    document.getElementById('recDate').innerText = date;
+                    document.getElementById('receiptModal').classList.remove('hidden');
+
+                    // تفريغ الحقول
+                    document.getElementById('lookupCode').value = '';
+                    document.getElementById('payStudentName').value = '';
+                    document.getElementById('payAmount').value = '';
+                });
+            });
+        }
+
+        // عرض آخر المدفوعات
+        db.collection('payments').orderBy('timestamp', 'desc').limit(15).onSnapshot(snap => {
+            const tbody = document.getElementById('paymentsTableBody');
+            tbody.innerHTML = '';
+            snap.forEach(doc => {
+                const p = doc.data();
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr class="hover:bg-slate-800/40">
+                        <td class="p-3 font-mono text-emerald-400 font-bold">${p.studentCode}</td>
+                        <td class="p-3 font-bold text-white">${p.studentName}</td>
+                        <td class="p-3 text-slate-300">${p.month}</td>
+                        <td class="p-3 font-bold text-emerald-300">${p.amount} دج</td>
+                        <td class="p-3 text-slate-400 text-xs">${p.date}</td>
+                    </tr>
+                `);
+            });
+        });
+    </script>
+</body>
+</html>
